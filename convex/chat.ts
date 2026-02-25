@@ -1,0 +1,122 @@
+import {
+	mutationGeneric as mutation,
+	queryGeneric as query,
+} from "convex/server";
+import { v } from "convex/values";
+
+export const createOrGetSession = mutation({
+	args: {
+		telegramChatId: v.number(),
+		title: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query("sessions")
+			.withIndex("by_telegram_chat_id_is_active", (queryBuilder) =>
+				queryBuilder
+					.eq("telegramChatId", args.telegramChatId)
+					.eq("isActive", true),
+			)
+			.first();
+
+		if (existing) {
+			return existing._id;
+		}
+
+		return ctx.db.insert("sessions", {
+			telegramChatId: args.telegramChatId,
+			title: args.title,
+			isActive: true,
+		});
+	},
+});
+
+export const saveMessage = mutation({
+	args: {
+		sessionId: v.id("sessions"),
+		role: v.union(
+			v.literal("user"),
+			v.literal("assistant"),
+			v.literal("system"),
+		),
+		content: v.string(),
+		createdAt: v.number(),
+	},
+	handler: async (ctx, args) => {
+		return ctx.db.insert("messages", args);
+	},
+});
+
+export const getSessionHistory = query({
+	args: {
+		sessionId: v.id("sessions"),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const limit = Math.max(1, Math.min(args.limit ?? 20, 200));
+
+		const docs = await ctx.db
+			.query("messages")
+			.withIndex("by_session_id_created_at", (queryBuilder) =>
+				queryBuilder.eq("sessionId", args.sessionId),
+			)
+			.order("desc")
+			.take(limit);
+
+		return docs.reverse();
+	},
+});
+
+export const getAllSessions = query({
+	args: {},
+	handler: async (ctx) => {
+		const sessions = await ctx.db.query("sessions").collect();
+
+		const sessionsWithLastMessage = await Promise.all(
+			sessions.map(async (session) => {
+				const lastMessage = await ctx.db
+					.query("messages")
+					.withIndex("by_session_id_created_at", (queryBuilder) =>
+						queryBuilder.eq("sessionId", session._id),
+					)
+					.order("desc")
+					.first();
+
+				return {
+					...session,
+					lastMessageAt: lastMessage?.createdAt ?? 0,
+					messageCount: await ctx.db
+						.query("messages")
+						.withIndex("by_session_id", (queryBuilder) =>
+							queryBuilder.eq("sessionId", session._id),
+						)
+						.collect()
+						.then((messages) => messages.length),
+				};
+			}),
+		);
+
+		return sessionsWithLastMessage.sort(
+			(a, b) => b.lastMessageAt - a.lastMessageAt,
+		);
+	},
+});
+
+export const getMessagesBySession = query({
+	args: {
+		sessionId: v.optional(v.id("sessions")),
+	},
+	handler: async (ctx, args) => {
+		if (!args.sessionId) {
+			return [];
+		}
+
+		return ctx.db
+			.query("messages")
+			.withIndex("by_session_id_created_at", (queryBuilder) =>
+				queryBuilder.eq("sessionId", args.sessionId),
+			)
+			.order("asc")
+			.collect();
+	},
+});

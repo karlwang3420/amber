@@ -1,25 +1,32 @@
 {
-  "name": "amber",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "nuxt build",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "typecheck": "vue-tsc --noEmit"
-  },
-  "dependencies": {
-    "@nuxt/ui": "^4.5.0",
-    "nuxt": "^4.3.1"
-  },
-  "devDependencies": {
-    "@nuxt/eslint": "^1.15.2",
-    "typescript": "^5.8.2",
-    "vite": "^6.2.2",
-    "vue-tsc": "^2.2.10"
-  }
+	"name": "amber",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "nuxt build",
+		"dev": "nuxt dev",
+		"dev:all": "run-p dev convex:dev",
+		"generate": "nuxt generate",
+		"preview": "nuxt preview",
+		"convex:dev": "convex dev",
+		"convex:codegen": "convex codegen",
+		"postinstall": "nuxt prepare",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"typecheck": "vue-tsc --noEmit"
+	},
+	"dependencies": {
+		"@nuxt/ui": "^4.5.0",
+		"convex": "^1.32.0",
+		"convex-vue": "^0.1.5",
+		"npm-run-all": "^4.1.5",
+		"nuxt": "^4.3.1"
+	},
+	"devDependencies": {
+		"@nuxt/eslint": "^1.15.2",
+		"@types/node": "^25.3.0",
+		"typescript": "^5.8.2",
+		"vite": "^6.2.2",
+		"vue-tsc": "^2.2.10"
+	}
 }
