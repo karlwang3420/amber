@@ -65,3 +65,19 @@ Run container:
 The container starts Nitro with:
 
 `node .output/server/index.mjs`
+
+### Deploy to Google Cloud Run
+
+From the project root, you can deploy Amber to Cloud Run using the PowerShell script:
+
+- Basic deploy (uses current `gcloud` project and region default):
+
+  `.\scripts\deploy-gcp.ps1`
+
+- Specify project/region/service name explicitly:
+
+  `.\scripts\deploy-gcp.ps1 -ProjectId "my-project" -Region "us-central1" -ServiceName "amber-web-prod"`
+
+- Build with Cloud Build and show commands without executing:
+
+  `.\scripts\deploy-gcp.ps1 -UseCloudBuild -DryRun`

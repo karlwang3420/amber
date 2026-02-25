@@ -7,14 +7,16 @@ import { v } from "convex/values";
 export const createOrGetSession = mutation({
 	args: {
 		telegramChatId: v.number(),
+		topicId: v.optional(v.number()),
 		title: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
 			.query("sessions")
-			.withIndex("by_telegram_chat_id_is_active", (queryBuilder) =>
+			.withIndex("by_telegram_chat_id_topic_id_is_active", (queryBuilder) =>
 				queryBuilder
 					.eq("telegramChatId", args.telegramChatId)
+					.eq("topicId", args.topicId)
 					.eq("isActive", true),
 			)
 			.first();
@@ -24,9 +26,11 @@ export const createOrGetSession = mutation({
 		}
 
 		return ctx.db.insert("sessions", {
+			topicId: args.topicId,
 			telegramChatId: args.telegramChatId,
 			title: args.title,
 			isActive: true,
+			createdAt: Date.now(),
 		});
 	},
 });
