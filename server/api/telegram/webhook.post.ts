@@ -20,7 +20,9 @@ type GeminiResponse = {
 };
 
 type TelegramUpdate = {
+	update_id?: number;
 	message?: {
+		message_id?: number;
 		chat?: {
 			id?: number;
 		};
@@ -89,6 +91,23 @@ async function sendTelegramMessage(
 }
 
 export default defineEventHandler(async (event) => {
+	// Always return 200 to Telegram to prevent webhook retries.
+	// Errors are logged server-side but never cause a non-200 response.
+	try {
+		return await handleTelegramUpdate(event);
+	} catch (error) {
+		console.error("[webhook] Unhandled error:", error);
+		return { ok: true };
+	}
+});
+
+// Track recently processed update IDs to prevent duplicate processing on retries
+const recentUpdateIds = new Set<number>();
+const MAX_RECENT_UPDATES = 200;
+
+async function handleTelegramUpdate(
+	event: Parameters<Parameters<typeof defineEventHandler>[0]>[0],
+) {
 	const runtimeConfig = useRuntimeConfig(event);
 
 	const botToken = runtimeConfig.telegramBotToken;
@@ -101,8 +120,8 @@ export default defineEventHandler(async (event) => {
 	const convexUrl = runtimeConfig.public.convexUrl;
 
 	if (!botToken || !allowedIdRaw || !geminiApiKey || !convexUrl) {
-		setResponseStatus(event, 500);
-		return { ok: false, error: "Missing required environment configuration" };
+		console.error("[webhook] Missing required environment configuration");
+		return { ok: true };
 	}
 
 	const geminiApiKeyValue = String(geminiApiKey);
@@ -113,11 +132,12 @@ export default defineEventHandler(async (event) => {
 
 	const allowedId = Number(allowedIdRaw);
 	if (!Number.isFinite(allowedId)) {
-		setResponseStatus(event, 500);
-		return { ok: false, error: "Invalid TELEGRAM_ALLOWED_ID" };
+		console.error("[webhook] Invalid TELEGRAM_ALLOWED_ID");
+		return { ok: true };
 	}
 
 	const body = await readBody<TelegramUpdate>(event);
+	const updateId = body?.update_id;
 	const chatId = body?.message?.chat?.id;
 	const threadId = body?.message?.message_thread_id;
 	const incomingText = body?.message?.text;
@@ -130,9 +150,22 @@ export default defineEventHandler(async (event) => {
 		return { ok: true, ignored: true };
 	}
 
+	// Deduplicate: skip if we already processed this update
+	if (typeof updateId === "number") {
+		if (recentUpdateIds.has(updateId)) {
+			console.log(`[webhook] Duplicate update_id ${updateId}, skipping`);
+			return { ok: true };
+		}
+		recentUpdateIds.add(updateId);
+		// Evict old entries to prevent unbounded growth
+		if (recentUpdateIds.size > MAX_RECENT_UPDATES) {
+			const first = recentUpdateIds.values().next().value;
+			if (first !== undefined) recentUpdateIds.delete(first);
+		}
+	}
+
 	if (chatId !== allowedId) {
-		setResponseStatus(event, 403);
-		return { ok: false, error: "Forbidden chat id" };
+		return { ok: true };
 	}
 
 	const convexClient = new ConvexHttpClient(convexUrl);
@@ -219,18 +252,14 @@ export default defineEventHandler(async (event) => {
 
 	if (!llmResponse.ok) {
 		const errorText = await llmResponse.text();
+		console.error(`[webhook] LLM request failed: ${errorText}`);
 		await sendTelegramMessage(
 			botToken,
 			chatId,
-			"Amber failed to contact the model. Please try again.",
+			"Failed to contact the model. Please try again later.",
 			threadId,
 		);
-		setResponseStatus(event, 502);
-		return {
-			ok: false,
-			error: "LLM request failed",
-			detail: errorText,
-		};
+		return { ok: true };
 	}
 
 	const llmJson = (await llmResponse.json()) as GeminiResponse;
@@ -266,4 +295,4 @@ export default defineEventHandler(async (event) => {
 	await sendTelegramMessage(botToken, chatId, assistantText, threadId);
 
 	return { ok: true };
-});
+}
