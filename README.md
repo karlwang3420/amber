@@ -14,12 +14,12 @@ Private Nuxt 4 + Nuxt UI Telegram bot backend with Convex as permanent memory st
 
 Copy `.env.example` to `.env` and fill values:
 
-- `CONVEX_DEPLOYMENT`
-- `NEXT_PUBLIC_CONVEX_URL`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_ALLOWED_ID`
-- `GEMINI_API_KEY`
-- optional: `DEFAULT_MODEL`, `GEMINI_BASE_URL`, `SYSTEM_PROMPT`
+- `NUXT_CONVEX_DEPLOYMENT`
+- `NUXT_PUBLIC_CONVEX_URL`
+- `NUXT_TELEGRAM_BOT_TOKEN`
+- `NUXT_TELEGRAM_ALLOWED_ID`
+- `NUXT_GEMINI_API_KEY`
+- optional: `NUXT_GEMINI_MODEL`, `NUXT_GEMINI_BASE_URL`, `NUXT_SYSTEM_PROMPT`
 
 ## Local Development
 

@@ -7,21 +7,17 @@ export default defineNuxtConfig({
 	devtools: { enabled: true },
 	modules: ["@nuxt/ui", "@nuxt/eslint"],
 	runtimeConfig: {
-		convexDeployment: process.env.CONVEX_DEPLOYMENT,
-		telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
-		telegramAllowedId: process.env.TELEGRAM_ALLOWED_ID,
-		geminiApiKey: process.env.GEMINI_API_KEY,
-		geminiModel:
-			process.env.DEFAULT_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-pro",
+		convexDeployment: process.env.NUXT_CONVEX_DEPLOYMENT,
+		telegramBotToken: process.env.NUXT_TELEGRAM_BOT_TOKEN,
+		telegramAllowedId: process.env.NUXT_TELEGRAM_ALLOWED_ID,
+		geminiApiKey: process.env.NUXT_GEMINI_API_KEY,
+		geminiModel: process.env.NUXT_GEMINI_MODEL || "gemini-2.5-pro",
 		geminiBaseUrl:
-			process.env.GEMINI_BASE_URL ||
+			process.env.NUXT_GEMINI_BASE_URL ||
 			"https://generativelanguage.googleapis.com/v1beta",
-		systemPrompt: process.env.SYSTEM_PROMPT || "",
+		systemPrompt: process.env.NUXT_SYSTEM_PROMPT || "",
 		public: {
-			convexUrl:
-				process.env.NEXT_PUBLIC_CONVEX_URL ||
-				process.env.VITE_CONVEX_URL ||
-				process.env.CONVEX_URL,
+			convexUrl: process.env.NUXT_PUBLIC_CONVEX_URL,
 		},
 	},
 	nitro: {

@@ -156,7 +156,7 @@ function Get-EnvVarsFile {
     $tempEnvFile = Join-Path $env:TEMP "gcp-deploy-env-$([guid]::NewGuid().ToString('N').Substring(0,8)).yaml"
     $yamlLines = @()
     $content = Get-Content $EnvFile
-    
+
     foreach ($line in $content) {
         # Skip comments and empty lines
         if ($line -match "^\s*#" -or $line -match "^\s*$") {
@@ -191,7 +191,8 @@ function Build-LocalDocker {
     
     if ($DryRun) {
         Write-Host "[DRY-RUN] docker build -t $ImageTag -t $ImageLatest ." -ForegroundColor Yellow
-    } else {
+    }
+    else {
         docker build -t $ImageTag -t $ImageLatest .
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Docker build failed."
@@ -211,7 +212,8 @@ function Push-ToGcr {
     if ($DryRun) {
         Write-Host "[DRY-RUN] docker push $ImageTag" -ForegroundColor Yellow
         Write-Host "[DRY-RUN] docker push $ImageLatest" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         docker push $ImageTag
         docker push $ImageLatest
         
@@ -262,7 +264,8 @@ function Deploy-ToCloudRun {
     
     if ($DryRun) {
         Write-Host "[DRY-RUN] $fullCmd" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         Invoke-Expression $fullCmd
         $deployExitCode = $LASTEXITCODE
         
@@ -315,7 +318,8 @@ function Main {
     
     if ($UseCloudBuild) {
         Build-WithCloudBuild
-    } else {
+    }
+    else {
         Build-LocalDocker
         Push-ToGcr
     }

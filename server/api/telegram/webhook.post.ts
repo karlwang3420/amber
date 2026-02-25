@@ -21,7 +21,6 @@ type GeminiResponse = {
 
 type TelegramUpdate = {
 	message?: {
-		message_thread_id?: number;
 		chat?: {
 			id?: number;
 		};
@@ -31,7 +30,7 @@ type TelegramUpdate = {
 
 const createOrGetSessionRef = makeFunctionReference<
 	"mutation",
-	{ telegramChatId: number; topicId?: number; title?: string },
+	{ telegramChatId: number; title?: string },
 	string
 >("chat:createOrGetSession");
 
@@ -55,23 +54,16 @@ async function sendTelegramMessage(
 	botToken: string,
 	chatId: number,
 	text: string,
-	options?: { messageThreadId?: number },
 ) {
-	const payload: Record<string, unknown> = {
-		chat_id: chatId,
-		text,
-	};
-
-	if (typeof options?.messageThreadId === "number") {
-		payload.message_thread_id = options.messageThreadId;
-	}
-
 	await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
 		},
-		body: JSON.stringify(payload),
+		body: JSON.stringify({
+			chat_id: chatId,
+			text,
+		}),
 	});
 }
 
@@ -106,9 +98,6 @@ export default defineEventHandler(async (event) => {
 	const body = await readBody<TelegramUpdate>(event);
 	const chatId = body?.message?.chat?.id;
 	const incomingText = body?.message?.text;
-	const messageThreadId = body?.message?.message_thread_id;
-	const topicId =
-		typeof messageThreadId === "number" ? messageThreadId : undefined;
 
 	if (
 		typeof chatId !== "number" ||
@@ -128,7 +117,6 @@ export default defineEventHandler(async (event) => {
 
 	const sessionId = await convexClient.mutation(createOrGetSessionRef, {
 		telegramChatId: chatId,
-		topicId,
 	});
 
 	const history = await convexClient.query(getSessionHistoryRef, {
@@ -187,7 +175,6 @@ export default defineEventHandler(async (event) => {
 			botToken,
 			chatId,
 			"Amber failed to contact the model. Please try again.",
-			{ messageThreadId: topicId },
 		);
 		setResponseStatus(event, 502);
 		return {
@@ -211,9 +198,7 @@ export default defineEventHandler(async (event) => {
 		createdAt: Date.now(),
 	});
 
-	await sendTelegramMessage(botToken, chatId, assistantText, {
-		messageThreadId: topicId,
-	});
+	await sendTelegramMessage(botToken, chatId, assistantText);
 
 	return { ok: true };
 });
