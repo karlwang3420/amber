@@ -24,13 +24,14 @@ type TelegramUpdate = {
 		chat?: {
 			id?: number;
 		};
+		message_thread_id?: number;
 		text?: string;
 	};
 };
 
 const createOrGetSessionRef = makeFunctionReference<
 	"mutation",
-	{ telegramChatId: number; title?: string },
+	{ telegramChatId: number; title?: string; botUsername?: string },
 	string
 >("chat:createOrGetSession");
 
@@ -46,6 +47,24 @@ const getSessionHistoryRef = makeFunctionReference<
 	StoredMessage[]
 >("chat:getSessionHistory");
 
+const getBotMemoriesRef = makeFunctionReference<
+	"query",
+	{ botUsername: string },
+	Array<{ botUsername: string; content: string; createdAt: number }>
+>("memory:getBotMemories");
+
+const saveMemoryRef = makeFunctionReference<
+	"mutation",
+	{ botUsername: string; content: string; createdAt: number },
+	string
+>("memory:saveMemory");
+
+// Core system prompt — edit here directly instead of using .env
+// to avoid backslash escaping issues with dotenv.
+const SYSTEM_PROMPT = `
+當我要你整理記憶時，用<memory> </memory>標籤包裹你要記錄的內容
+`.trim();
+
 function isValidRole(value: string): value is ChatRole {
 	return value === "user" || value === "assistant" || value === "system";
 }
@@ -54,6 +73,7 @@ async function sendTelegramMessage(
 	botToken: string,
 	chatId: number,
 	text: string,
+	threadId?: number,
 ) {
 	await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
 		method: "POST",
@@ -62,6 +82,7 @@ async function sendTelegramMessage(
 		},
 		body: JSON.stringify({
 			chat_id: chatId,
+			...(threadId !== undefined ? { message_thread_id: threadId } : {}),
 			text,
 		}),
 	});
@@ -76,6 +97,7 @@ export default defineEventHandler(async (event) => {
 	const geminiModel = runtimeConfig.geminiModel;
 	const geminiBaseUrl = runtimeConfig.geminiBaseUrl;
 	const systemPrompt = runtimeConfig.systemPrompt;
+	const botUsername = runtimeConfig.botUsername;
 	const convexUrl = runtimeConfig.public.convexUrl;
 
 	if (!botToken || !allowedIdRaw || !geminiApiKey || !convexUrl) {
@@ -97,6 +119,7 @@ export default defineEventHandler(async (event) => {
 
 	const body = await readBody<TelegramUpdate>(event);
 	const chatId = body?.message?.chat?.id;
+	const threadId = body?.message?.message_thread_id;
 	const incomingText = body?.message?.text;
 
 	if (
@@ -117,6 +140,7 @@ export default defineEventHandler(async (event) => {
 
 	const sessionId = await convexClient.mutation(createOrGetSessionRef, {
 		telegramChatId: chatId,
+		...(botUsername ? { botUsername: String(botUsername) } : {}),
 	});
 
 	const history = await convexClient.query(getSessionHistoryRef, {
@@ -149,6 +173,30 @@ export default defineEventHandler(async (event) => {
 
 	contents.push({ role: "user", parts: [{ text: normalizedText }] });
 
+	// Build systemInstruction: base constant + optional env override (append)
+	const envPromptExtra =
+		typeof systemPrompt === "string" ? systemPrompt.trim() : "";
+	let fullSystemPrompt = envPromptExtra
+		? `${SYSTEM_PROMPT}\n\n${envPromptExtra}`
+		: SYSTEM_PROMPT;
+
+	if (botUsername) {
+		const memories = await convexClient.query(getBotMemoriesRef, {
+			botUsername: String(botUsername),
+		});
+
+		if (memories.length > 0) {
+			const memoryBlock = memories
+				.map((m) => {
+					const date = new Date(m.createdAt).toISOString().split("T")[0];
+					return `[${date}] ${m.content}`;
+				})
+				.join("\n");
+
+			fullSystemPrompt += `\n\n--- Long-term memories ---\n${memoryBlock}\n---`;
+		}
+	}
+
 	const llmResponse = await fetch(
 		`${geminiBaseUrlValue}/models/${encodeURIComponent(geminiModelValue)}:generateContent?key=${encodeURIComponent(geminiApiKeyValue)}`,
 		{
@@ -158,10 +206,10 @@ export default defineEventHandler(async (event) => {
 			},
 			body: JSON.stringify({
 				contents,
-				...(typeof systemPrompt === "string" && systemPrompt.trim().length > 0
+				...(fullSystemPrompt.length > 0
 					? {
 							systemInstruction: {
-								parts: [{ text: systemPrompt.trim() }],
+								parts: [{ text: fullSystemPrompt }],
 							},
 						}
 					: {}),
@@ -175,6 +223,7 @@ export default defineEventHandler(async (event) => {
 			botToken,
 			chatId,
 			"Amber failed to contact the model. Please try again.",
+			threadId,
 		);
 		setResponseStatus(event, 502);
 		return {
@@ -198,7 +247,23 @@ export default defineEventHandler(async (event) => {
 		createdAt: Date.now(),
 	});
 
-	await sendTelegramMessage(botToken, chatId, assistantText);
+	// Extract <memory> tags and persist as long-term memories
+	if (botUsername) {
+		const memoryRegex = /<memory>([\s\S]*?)<\/memory>/g;
+		let match: RegExpExecArray | null;
+		while ((match = memoryRegex.exec(assistantText)) !== null) {
+			const memoryContent = (match[1] ?? "").trim();
+			if (memoryContent.length > 0) {
+				await convexClient.mutation(saveMemoryRef, {
+					botUsername: String(botUsername),
+					content: memoryContent,
+					createdAt: Date.now(),
+				});
+			}
+		}
+	}
+
+	await sendTelegramMessage(botToken, chatId, assistantText, threadId);
 
 	return { ok: true };
 });

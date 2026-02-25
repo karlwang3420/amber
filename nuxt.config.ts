@@ -16,6 +16,7 @@ export default defineNuxtConfig({
 			process.env.NUXT_GEMINI_BASE_URL ||
 			"https://generativelanguage.googleapis.com/v1beta",
 		systemPrompt: process.env.NUXT_SYSTEM_PROMPT || "",
+		botUsername: process.env.NUXT_BOT_USERNAME || "",
 		public: {
 			convexUrl: process.env.NUXT_PUBLIC_CONVEX_URL,
 		},

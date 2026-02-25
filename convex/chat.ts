@@ -9,6 +9,7 @@ export const createOrGetSession = mutation({
 		telegramChatId: v.number(),
 		topicId: v.optional(v.number()),
 		title: v.optional(v.string()),
+		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
@@ -29,6 +30,7 @@ export const createOrGetSession = mutation({
 			topicId: args.topicId,
 			telegramChatId: args.telegramChatId,
 			title: args.title,
+			botUsername: args.botUsername,
 			isActive: true,
 			createdAt: Date.now(),
 		});
