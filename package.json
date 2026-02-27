@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "nuxt build",
-		"dev": "nuxt dev",
+		"dev": "nuxt dev --port 3010",
 		"dev:all": "run-p dev convex:dev",
 		"generate": "nuxt generate",
 		"preview": "nuxt preview",
@@ -25,6 +25,7 @@
 	"devDependencies": {
 		"@nuxt/eslint": "^1.15.2",
 		"@types/node": "^25.3.0",
+		"tailwindcss": "^4.2.1",
 		"typescript": "^5.8.2",
 		"vite": "^6.2.2",
 		"vue-tsc": "^2.2.10"

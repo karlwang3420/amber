@@ -9,6 +9,7 @@ export default defineSchema({
 		botUsername: v.optional(v.string()),
 		isActive: v.boolean(),
 		createdAt: v.optional(v.number()),
+		systemPromptSnapshot: v.optional(v.string()),
 	})
 		.index("by_telegram_chat_id", ["telegramChatId"])
 		.index("by_telegram_chat_id_is_active", ["telegramChatId", "isActive"])
@@ -16,7 +17,8 @@ export default defineSchema({
 			"telegramChatId",
 			"topicId",
 			"isActive",
-		]),
+		])
+		.index("by_bot_username", ["botUsername"]),
 
 	messages: defineTable({
 		sessionId: v.id("sessions"),

@@ -1,7 +1,4 @@
-import {
-	mutationGeneric as mutation,
-	queryGeneric as query,
-} from "convex/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const createOrGetSession = mutation({
@@ -12,15 +9,24 @@ export const createOrGetSession = mutation({
 		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const existing = await ctx.db
-			.query("sessions")
-			.withIndex("by_telegram_chat_id_topic_id_is_active", (queryBuilder) =>
-				queryBuilder
-					.eq("telegramChatId", args.telegramChatId)
-					.eq("topicId", args.topicId)
-					.eq("isActive", true),
-			)
-			.first();
+		const existing =
+			args.topicId !== undefined
+				? await ctx.db
+						.query("sessions")
+						.withIndex("by_telegram_chat_id_topic_id_is_active", (q) =>
+							q
+								.eq("telegramChatId", args.telegramChatId)
+								.eq("topicId", args.topicId),
+						)
+						.filter((q) => q.eq(q.field("isActive"), true))
+						.first()
+				: await ctx.db
+						.query("sessions")
+						.withIndex("by_telegram_chat_id_is_active", (q) =>
+							q.eq("telegramChatId", args.telegramChatId).eq("isActive", true),
+						)
+						.filter((q) => q.eq(q.field("topicId"), undefined))
+						.first();
 
 		if (existing) {
 			return existing._id;
@@ -73,10 +79,39 @@ export const getSessionHistory = query({
 	},
 });
 
+export const getSessionSystemPrompt = query({
+	args: { sessionId: v.id("sessions") },
+	handler: async (ctx, args) => {
+		const session = await ctx.db.get(args.sessionId);
+		return session?.systemPromptSnapshot ?? null;
+	},
+});
+
+export const setSessionSystemPrompt = mutation({
+	args: {
+		sessionId: v.id("sessions"),
+		systemPromptSnapshot: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.sessionId, {
+			systemPromptSnapshot: args.systemPromptSnapshot,
+		});
+	},
+});
+
 export const getAllSessions = query({
-	args: {},
-	handler: async (ctx) => {
-		const sessions = await ctx.db.query("sessions").collect();
+	args: {
+		botUsername: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const sessions = args.botUsername
+			? await ctx.db
+					.query("sessions")
+					.withIndex("by_bot_username", (q) =>
+						q.eq("botUsername", args.botUsername),
+					)
+					.collect()
+			: await ctx.db.query("sessions").collect();
 
 		const sessionsWithLastMessage = await Promise.all(
 			sessions.map(async (session) => {
@@ -117,10 +152,11 @@ export const getMessagesBySession = query({
 			return [];
 		}
 
+		const sessionId = args.sessionId;
 		return ctx.db
 			.query("messages")
 			.withIndex("by_session_id_created_at", (queryBuilder) =>
-				queryBuilder.eq("sessionId", args.sessionId),
+				queryBuilder.eq("sessionId", sessionId),
 			)
 			.order("asc")
 			.collect();

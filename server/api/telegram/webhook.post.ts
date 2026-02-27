@@ -33,7 +33,12 @@ type TelegramUpdate = {
 
 const createOrGetSessionRef = makeFunctionReference<
 	"mutation",
-	{ telegramChatId: number; title?: string; botUsername?: string },
+	{
+		telegramChatId: number;
+		topicId?: number;
+		title?: string;
+		botUsername?: string;
+	},
 	string
 >("chat:createOrGetSession");
 
@@ -60,6 +65,18 @@ const saveMemoryRef = makeFunctionReference<
 	{ botUsername: string; content: string; createdAt: number },
 	string
 >("memory:saveMemory");
+
+const getSessionSystemPromptRef = makeFunctionReference<
+	"query",
+	{ sessionId: string },
+	string | null
+>("chat:getSessionSystemPrompt");
+
+const setSessionSystemPromptRef = makeFunctionReference<
+	"mutation",
+	{ sessionId: string; systemPromptSnapshot: string },
+	void
+>("chat:setSessionSystemPrompt");
 
 // Core system prompt — edit here directly instead of using .env
 // to avoid backslash escaping issues with dotenv.
@@ -173,20 +190,17 @@ async function handleTelegramUpdate(
 
 	const sessionId = await convexClient.mutation(createOrGetSessionRef, {
 		telegramChatId: chatId,
+		...(threadId !== undefined ? { topicId: threadId } : {}),
 		...(botUsername ? { botUsername: String(botUsername) } : {}),
 	});
 
 	const history = await convexClient.query(getSessionHistoryRef, {
 		sessionId,
-		limit: 30,
+		limit: 100, // Increased to ensure mid-session memories don't fall out of context quickly
 	});
 
-	await convexClient.mutation(saveMessageRef, {
-		sessionId,
-		role: "user",
-		content: normalizedText,
-		createdAt: Date.now(),
-	});
+	// User message is saved to DB only after a successful LLM response
+	// to prevent accumulation of unsent messages on API failures.
 
 	const contents: Array<{
 		role: "user" | "model";
@@ -206,28 +220,41 @@ async function handleTelegramUpdate(
 
 	contents.push({ role: "user", parts: [{ text: normalizedText }] });
 
-	// Build systemInstruction: base constant + optional env override (append)
-	const envPromptExtra =
-		typeof systemPrompt === "string" ? systemPrompt.trim() : "";
-	let fullSystemPrompt = envPromptExtra
-		? `${SYSTEM_PROMPT}\n\n${envPromptExtra}`
-		: SYSTEM_PROMPT;
+	// Snapshot the full system prompt (base + memories) once per session.
+	// On subsequent calls within the same session, reuse the stored snapshot
+	// so `systemInstruction` never changes — enabling Gemini implicit caching.
+	let fullSystemPrompt = await convexClient.query(getSessionSystemPromptRef, {
+		sessionId,
+	});
 
-	if (botUsername) {
-		const memories = await convexClient.query(getBotMemoriesRef, {
-			botUsername: String(botUsername),
-		});
+	if (fullSystemPrompt === null) {
+		const envPromptExtra =
+			typeof systemPrompt === "string" ? systemPrompt.trim() : "";
+		fullSystemPrompt = envPromptExtra
+			? `${SYSTEM_PROMPT}\n\n${envPromptExtra}`
+			: SYSTEM_PROMPT;
 
-		if (memories.length > 0) {
-			const memoryBlock = memories
-				.map((m) => {
-					const date = new Date(m.createdAt).toISOString().split("T")[0];
-					return `[${date}] ${m.content}`;
-				})
-				.join("\n");
+		if (botUsername) {
+			const memories = await convexClient.query(getBotMemoriesRef, {
+				botUsername: String(botUsername),
+			});
 
-			fullSystemPrompt += `\n\n--- Long-term memories ---\n${memoryBlock}\n---`;
+			if (memories.length > 0) {
+				const memoryBlock = memories
+					.map((m) => {
+						const date = new Date(m.createdAt).toISOString().split("T")[0];
+						return `[${date}] ${m.content}`;
+					})
+					.join("\n");
+
+				fullSystemPrompt += `\n\n--- Long-term memories ---\n${memoryBlock}\n---`;
+			}
 		}
+
+		await convexClient.mutation(setSessionSystemPromptRef, {
+			sessionId,
+			systemPromptSnapshot: fullSystemPrompt,
+		});
 	}
 
 	const llmResponse = await fetch(
@@ -269,6 +296,14 @@ async function handleTelegramUpdate(
 			.join("\n")
 			.trim() || "I could not generate a response.";
 
+	// Save both user and assistant messages only on success
+	await convexClient.mutation(saveMessageRef, {
+		sessionId,
+		role: "user",
+		content: normalizedText,
+		createdAt: Date.now(),
+	});
+
 	await convexClient.mutation(saveMessageRef, {
 		sessionId,
 		role: "assistant",
@@ -276,18 +311,45 @@ async function handleTelegramUpdate(
 		createdAt: Date.now(),
 	});
 
-	// Extract <memory> tags and persist as long-term memories
+	// Extract <memory> tags and persist as long-term memories.
+	// Uses a start-pointer approach: track the last <memory> open tag position,
+	// and when </memory> is found, extract the segment between them.
+	// Nested/duplicate <memory> tags move the start pointer forward.
 	if (botUsername) {
-		const memoryRegex = /<memory>([\s\S]*?)<\/memory>/g;
-		let match: RegExpExecArray | null;
-		while ((match = memoryRegex.exec(assistantText)) !== null) {
-			const memoryContent = (match[1] ?? "").trim();
-			if (memoryContent.length > 0) {
-				await convexClient.mutation(saveMemoryRef, {
-					botUsername: String(botUsername),
-					content: memoryContent,
-					createdAt: Date.now(),
-				});
+		let cursor = 0;
+		let startPointer: number | null = null;
+		const openTag = "<memory>";
+		const closeTag = "</memory>";
+
+		while (cursor < assistantText.length) {
+			const nextOpen = assistantText.indexOf(openTag, cursor);
+			const nextClose = assistantText.indexOf(closeTag, cursor);
+
+			// No more tags at all — done
+			if (nextOpen === -1 && nextClose === -1) break;
+
+			// Determine which tag comes first
+			const openFirst =
+				nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose);
+
+			if (openFirst) {
+				// Found <memory> — set (or move) the start pointer
+				startPointer = nextOpen + openTag.length;
+				cursor = startPointer;
+			} else {
+				// Found </memory>
+				if (startPointer !== null) {
+					const segment = assistantText.slice(startPointer, nextClose).trim();
+					if (segment.length > 0) {
+						await convexClient.mutation(saveMemoryRef, {
+							botUsername: String(botUsername),
+							content: segment,
+							createdAt: Date.now(),
+						});
+					}
+					startPointer = null;
+				}
+				cursor = nextClose + closeTag.length;
 			}
 		}
 	}

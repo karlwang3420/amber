@@ -38,7 +38,7 @@
 
 param(
     [string]$ProjectId,
-    [string]$Region = "asia-southeast1",
+    [string]$Region = "us-east4",
     [string]$ServiceName = "amber-web",
     [string]$EnvFile = ".env",
     [switch]$UseCloudBuild,

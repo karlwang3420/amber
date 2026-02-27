@@ -6,6 +6,7 @@ export default defineNuxtConfig({
 	},
 	devtools: { enabled: true },
 	modules: ["@nuxt/ui", "@nuxt/eslint"],
+	css: ["~/assets/css/main.css"],
 	runtimeConfig: {
 		convexDeployment: process.env.NUXT_CONVEX_DEPLOYMENT,
 		telegramBotToken: process.env.NUXT_TELEGRAM_BOT_TOKEN,
@@ -19,6 +20,10 @@ export default defineNuxtConfig({
 		botUsername: process.env.NUXT_BOT_USERNAME || "",
 		public: {
 			convexUrl: process.env.NUXT_PUBLIC_CONVEX_URL,
+			botUsername:
+				process.env.NUXT_PUBLIC_BOT_USERNAME ||
+				process.env.NUXT_BOT_USERNAME ||
+				"",
 		},
 	},
 	nitro: {
