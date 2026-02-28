@@ -143,6 +143,39 @@ export const getAllSessions = query({
 	},
 });
 
+export const deactivateSession = mutation({
+	args: {
+		telegramChatId: v.number(),
+		topicId: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const existing =
+			args.topicId !== undefined
+				? await ctx.db
+						.query("sessions")
+						.withIndex("by_telegram_chat_id_topic_id_is_active", (q) =>
+							q
+								.eq("telegramChatId", args.telegramChatId)
+								.eq("topicId", args.topicId),
+						)
+						.filter((q) => q.eq(q.field("isActive"), true))
+						.first()
+				: await ctx.db
+						.query("sessions")
+						.withIndex("by_telegram_chat_id_is_active", (q) =>
+							q.eq("telegramChatId", args.telegramChatId).eq("isActive", true),
+						)
+						.filter((q) => q.eq(q.field("topicId"), undefined))
+						.first();
+
+		if (existing) {
+			await ctx.db.patch(existing._id, { isActive: false });
+			return true;
+		}
+		return false;
+	},
+});
+
 export const getMessagesBySession = query({
 	args: {
 		sessionId: v.optional(v.id("sessions")),

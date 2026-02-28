@@ -78,6 +78,12 @@ const setSessionSystemPromptRef = makeFunctionReference<
 	void
 >("chat:setSessionSystemPrompt");
 
+const deactivateSessionRef = makeFunctionReference<
+	"mutation",
+	{ telegramChatId: number; topicId?: number },
+	boolean
+>("chat:deactivateSession");
+
 // Core system prompt — edit here directly instead of using .env
 // to avoid backslash escaping issues with dotenv.
 const SYSTEM_PROMPT = `
@@ -187,6 +193,21 @@ async function handleTelegramUpdate(
 
 	const convexClient = new ConvexHttpClient(convexUrl);
 	const normalizedText = incomingText.trim();
+
+	// Handle /new command: deactivate current session so next message starts fresh
+	if (normalizedText === "/new") {
+		await convexClient.mutation(deactivateSessionRef, {
+			telegramChatId: chatId,
+			...(threadId !== undefined ? { topicId: threadId } : {}),
+		});
+		await sendTelegramMessage(
+			botToken,
+			chatId,
+			"✅ New session created. Send your next message to begin.",
+			threadId,
+		);
+		return { ok: true };
+	}
 
 	const sessionId = await convexClient.mutation(createOrGetSessionRef, {
 		telegramChatId: chatId,
