@@ -41,6 +41,7 @@ param(
     [string]$Region = "us-east4",
     [string]$ServiceName = "amber-web",
     [string]$EnvFile = ".env",
+    [switch]$DeployConvex,
     [switch]$UseCloudBuild,
     [switch]$DryRun
 )
@@ -89,6 +90,14 @@ function Test-Prerequisites {
             exit 1
         }
     }
+
+    if ($DeployConvex) {
+        $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+        if (-not $pnpm) {
+            Write-Err "pnpm is required to deploy Convex. Please install pnpm or omit -DeployConvex."
+            exit 1
+        }
+    }
     
     # Check if authenticated
     $account = gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>$null
@@ -124,7 +133,45 @@ function Set-Configuration {
     Write-Host "  Service Name:    $ServiceName"
     Write-Host "  Image Tag:       $ImageTag"
     Write-Host "  Env File:        $EnvFile"
+    Write-Host "  Deploy Convex:   $DeployConvex"
     Write-Host "  Use Cloud Build: $UseCloudBuild"
+}
+
+function Set-ProcessEnvFromFile {
+    param([string]$FilePath)
+
+    if (-not (Test-Path $FilePath)) {
+        return
+    }
+
+    foreach ($line in Get-Content $FilePath) {
+        if ($line -match "^\s*#" -or $line -match "^\s*$") {
+            continue
+        }
+
+        if ($line -match "^([^=]+)=(.*)$") {
+            $key = $matches[1].Trim()
+            $value = $matches[2].Trim().Trim('"').Trim("'")
+
+            switch ($key) {
+                "CONVEX_DEPLOY_KEY" {
+                    if (-not $env:CONVEX_DEPLOY_KEY) {
+                        $env:CONVEX_DEPLOY_KEY = $value
+                    }
+                }
+                "CONVEX_DEPLOYMENT" {
+                    if (-not $env:CONVEX_DEPLOYMENT) {
+                        $env:CONVEX_DEPLOYMENT = $value
+                    }
+                }
+                "NUXT_CONVEX_DEPLOYMENT" {
+                    if (-not $env:CONVEX_DEPLOYMENT) {
+                        $env:CONVEX_DEPLOYMENT = $value
+                    }
+                }
+            }
+        }
+    }
 }
 
 function Enable-GcpApis {
@@ -184,6 +231,33 @@ function Get-EnvVarsFile {
     $yamlLines | Out-File -FilePath $tempEnvFile -Encoding UTF8
     Write-Success "Environment variables loaded ($($yamlLines.Count) variables)."
     return $tempEnvFile
+}
+
+function Deploy-ConvexFunctions {
+    Write-Info "Deploying Convex functions..."
+
+    Set-ProcessEnvFromFile -FilePath $EnvFile
+
+    if (-not $env:CONVEX_DEPLOYMENT) {
+        Write-Warn "CONVEX_DEPLOYMENT is not set. Convex deploy may fail unless your local CLI is already linked."
+    }
+
+    if (-not $env:CONVEX_DEPLOY_KEY) {
+        Write-Warn "CONVEX_DEPLOY_KEY is not set. Convex deploy may prompt for authentication or fail in non-interactive runs."
+    }
+
+    if ($DryRun) {
+        Write-Host "[DRY-RUN] pnpm exec convex deploy" -ForegroundColor Yellow
+        return
+    }
+
+    & pnpm exec convex deploy
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Convex deploy failed."
+        exit 1
+    }
+
+    Write-Success "Convex functions deployed."
 }
 
 function Build-LocalDocker {
@@ -315,6 +389,10 @@ function Main {
     Enable-GcpApis
     
     $envVarsFile = Get-EnvVarsFile
+
+    if ($DeployConvex) {
+        Deploy-ConvexFunctions
+    }
     
     if ($UseCloudBuild) {
         Build-WithCloudBuild

@@ -27,6 +27,11 @@ type TelegramUpdate = {
 			id?: number;
 		};
 		message_thread_id?: number;
+		entities?: Array<{
+			type?: string;
+			offset?: number;
+			length?: number;
+		}>;
 		text?: string;
 	};
 };
@@ -78,11 +83,16 @@ const setSessionSystemPromptRef = makeFunctionReference<
 	void
 >("chat:setSessionSystemPrompt");
 
-const deactivateSessionRef = makeFunctionReference<
+const createFreshSessionRef = makeFunctionReference<
 	"mutation",
-	{ telegramChatId: number; topicId?: number },
-	boolean
->("chat:deactivateSession");
+	{
+		telegramChatId: number;
+		topicId?: number;
+		title?: string;
+		botUsername?: string;
+	},
+	string
+>("chat:createFreshSession");
 
 // Core system prompt — edit here directly instead of using .env
 // to avoid backslash escaping issues with dotenv.
@@ -92,6 +102,46 @@ const SYSTEM_PROMPT = `
 
 function isValidRole(value: string): value is ChatRole {
 	return value === "user" || value === "assistant" || value === "system";
+}
+
+function extractTelegramCommand(
+	text: string,
+	entities?: Array<{ type?: string; offset?: number; length?: number }>,
+	botUsername?: string,
+) {
+	const commandEntity = entities?.find(
+		(entity) =>
+			entity.type === "bot_command" &&
+			entity.offset === 0 &&
+			typeof entity.length === "number" &&
+			entity.length > 1,
+	);
+
+	const rawCommand = commandEntity
+		? text.slice(0, commandEntity.length)
+		: text.startsWith("/")
+			? text.split(/\s+/, 1)[0]
+			: null;
+
+	if (!rawCommand) {
+		return null;
+	}
+
+	const [commandName, commandBot] = rawCommand.slice(1).split("@", 2);
+	if (!commandName) {
+		return null;
+	}
+
+	const normalizedBotUsername = botUsername?.replace(/^@/, "").toLowerCase();
+	if (
+		commandBot &&
+		(!normalizedBotUsername ||
+			commandBot.toLowerCase() !== normalizedBotUsername)
+	) {
+		return null;
+	}
+
+	return commandName.toLowerCase();
 }
 
 async function sendTelegramMessage(
@@ -163,6 +213,7 @@ async function handleTelegramUpdate(
 	const updateId = body?.update_id;
 	const chatId = body?.message?.chat?.id;
 	const threadId = body?.message?.message_thread_id;
+	const messageEntities = body?.message?.entities;
 	const incomingText = body?.message?.text;
 
 	if (
@@ -193,19 +244,35 @@ async function handleTelegramUpdate(
 
 	const convexClient = new ConvexHttpClient(convexUrl);
 	const normalizedText = incomingText.trim();
+	const telegramCommand = extractTelegramCommand(
+		normalizedText,
+		messageEntities,
+		typeof botUsername === "string" ? botUsername : undefined,
+	);
 
-	// Handle /new command: deactivate current session so next message starts fresh
-	if (normalizedText === "/new") {
-		await convexClient.mutation(deactivateSessionRef, {
-			telegramChatId: chatId,
-			...(threadId !== undefined ? { topicId: threadId } : {}),
-		});
-		await sendTelegramMessage(
-			botToken,
-			chatId,
-			"✅ New session created. Send your next message to begin.",
-			threadId,
-		);
+	// Handle /new command: create and switch to a fresh session immediately
+	if (telegramCommand === "new") {
+		try {
+			await convexClient.mutation(createFreshSessionRef, {
+				telegramChatId: chatId,
+				...(threadId !== undefined ? { topicId: threadId } : {}),
+				...(botUsername ? { botUsername: String(botUsername) } : {}),
+			});
+			await sendTelegramMessage(
+				botToken,
+				chatId,
+				"✅ New session created. You can start chatting in the new session now.",
+				threadId,
+			);
+		} catch (error) {
+			console.error("[webhook] Failed to create a fresh session:", error);
+			await sendTelegramMessage(
+				botToken,
+				chatId,
+				"Failed to create a new session right now. Please try again in a moment.",
+				threadId,
+			);
+		}
 		return { ok: true };
 	}
 

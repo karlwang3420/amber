@@ -6,6 +6,7 @@
 		"build": "nuxt build",
 		"dev": "nuxt dev --port 3010",
 		"dev:all": "run-p dev convex:dev",
+		"convex:deploy": "convex deploy",
 		"generate": "nuxt generate",
 		"preview": "nuxt preview",
 		"convex:dev": "convex dev",

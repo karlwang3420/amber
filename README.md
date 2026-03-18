@@ -74,6 +74,10 @@ From the project root, you can deploy Amber to Cloud Run using the PowerShell sc
 
   `.\scripts\deploy-gcp.ps1`
 
+- Deploy Convex first, then Cloud Run in one command:
+
+  `.\scripts\deploy-gcp.ps1 -DeployConvex`
+
 - Specify project/region/service name explicitly:
 
   `.\scripts\deploy-gcp.ps1 -ProjectId "my-project" -Region "us-central1" -ServiceName "amber-web-prod"`
@@ -81,3 +85,5 @@ From the project root, you can deploy Amber to Cloud Run using the PowerShell sc
 - Build with Cloud Build and show commands without executing:
 
   `.\scripts\deploy-gcp.ps1 -UseCloudBuild -DryRun`
+
+If you change files under `convex/`, you need to deploy Convex as well. Deploying only Cloud Run can leave the web app calling Convex functions that do not exist in the live Convex backend yet.
