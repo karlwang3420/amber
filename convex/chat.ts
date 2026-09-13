@@ -35,6 +35,23 @@ export const createOrGetSession = mutation({
 		return ctx.db.insert("sessions", {
 			topicId: args.topicId,
 			telegramChatId: args.telegramChatId,
+			channel: "telegram",
+			title: args.title,
+			botUsername: args.botUsername,
+			isActive: true,
+			createdAt: Date.now(),
+		});
+	},
+});
+
+export const createWebSession = mutation({
+	args: {
+		title: v.optional(v.string()),
+		botUsername: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		return ctx.db.insert("sessions", {
+			channel: "web",
 			title: args.title,
 			botUsername: args.botUsername,
 			isActive: true,
@@ -210,6 +227,7 @@ export const createFreshSession = mutation({
 		return ctx.db.insert("sessions", {
 			topicId: args.topicId,
 			telegramChatId: args.telegramChatId,
+			channel: "telegram",
 			title: args.title,
 			botUsername: args.botUsername,
 			isActive: true,

@@ -5,7 +5,8 @@
 	type Session = {
 		_id: string;
 		_creationTime: number;
-		telegramChatId: number;
+		telegramChatId?: number;
+		channel?: "telegram" | "web";
 		title?: string;
 		isActive: boolean;
 		lastMessageAt: number;
@@ -138,7 +139,9 @@
 
 		const sessionLabel =
 			selectedSession.value.title?.trim() ||
-			`chat-${selectedSession.value.telegramChatId}`;
+			(selectedSession.value.telegramChatId
+				? `chat-${selectedSession.value.telegramChatId}`
+				: `web-${selectedSession.value._id}`);
 		const fileName = `${sessionLabel.replace(/[^a-z0-9-_]/gi, "_")}.json`;
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement("a");
@@ -165,13 +168,22 @@
 							Soul Amber Vault
 						</h1>
 						<p class="text-xs text-gray-500">
-							Persistent Telegram memory &middot; Convex
+							Shared conversation memory &middot; Convex
 						</p>
 					</div>
 				</div>
-				<UBadge v-if="botUsername" color="neutral" variant="outline" size="sm">
-					@{{ botUsername }}
-				</UBadge>
+				<div class="flex items-center gap-2">
+					<UButton
+						to="/chat"
+						label="Open chat"
+						icon="i-lucide-message-circle"
+						color="primary"
+						variant="soft"
+						size="sm" />
+					<UBadge v-if="botUsername" color="neutral" variant="outline" size="sm">
+						@{{ botUsername }}
+					</UBadge>
+				</div>
 			</UContainer>
 		</header>
 
@@ -271,7 +283,12 @@
 								"
 								@click="selectSession(session._id)">
 								<div class="font-medium text-sm truncate">
-									{{ session.title || `Chat ${session.telegramChatId}` }}
+									{{
+										session.title ||
+										(session.telegramChatId
+											? `Chat ${session.telegramChatId}`
+											: "Web conversation")
+									}}
 								</div>
 								<div class="text-xs mt-0.5 opacity-60">
 									{{ session.messageCount }} messages
@@ -297,7 +314,9 @@
 									{{
 										selectedSession?.title ||
 										(selectedSession
-											? `Chat ${selectedSession.telegramChatId}`
+											? selectedSession.telegramChatId
+												? `Chat ${selectedSession.telegramChatId}`
+												: "Web conversation"
 											: "Select a session")
 									}}
 								</h2>

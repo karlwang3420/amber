@@ -17,7 +17,21 @@ export default defineNuxtConfig({
 			process.env.NUXT_GEMINI_BASE_URL ||
 			"https://generativelanguage.googleapis.com/v1beta",
 		systemPrompt: process.env.NUXT_SYSTEM_PROMPT || "",
-		botUsername: process.env.NUXT_BOT_USERNAME || "",
+		botUsername:
+			process.env.NUXT_BOT_USERNAME ||
+			process.env.NUXT_PUBLIC_BOT_USERNAME ||
+			"",
+		openRouterApiKey: process.env.NUXT_OPENROUTER_API_KEY || "",
+		openRouterBaseUrl:
+			process.env.NUXT_OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
+		openRouterTtsModel:
+			process.env.NUXT_OPENROUTER_TTS_MODEL || "fish-audio/s2.1-pro",
+		openRouterTtsVoice: process.env.NUXT_OPENROUTER_TTS_VOICE || "",
+		openRouterTtsReferenceAsset:
+			process.env.NUXT_OPENROUTER_TTS_REFERENCE_ASSET ||
+			"voice-reference.mp3",
+		openRouterTtsReferenceText:
+			process.env.NUXT_OPENROUTER_TTS_REFERENCE_TEXT || "",
 		public: {
 			convexUrl: process.env.NUXT_PUBLIC_CONVEX_URL,
 			botUsername:

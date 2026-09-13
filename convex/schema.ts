@@ -3,7 +3,8 @@ import { v } from "convex/values";
 
 export default defineSchema({
 	sessions: defineTable({
-		telegramChatId: v.number(),
+		telegramChatId: v.optional(v.number()),
+		channel: v.optional(v.union(v.literal("telegram"), v.literal("web"))),
 		topicId: v.optional(v.number()),
 		title: v.optional(v.string()),
 		botUsername: v.optional(v.string()),

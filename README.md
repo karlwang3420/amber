@@ -1,6 +1,6 @@
 # Amber
 
-Private Nuxt 4 + Nuxt UI Telegram bot backend with Convex as permanent memory storage.
+Private Nuxt 4 + Nuxt UI conversational assistant with web and Telegram interfaces, Convex permanent memory, and optional OpenRouter text-to-speech with Fish Audio voice cloning.
 
 ## Stack
 
@@ -9,6 +9,7 @@ Private Nuxt 4 + Nuxt UI Telegram bot backend with Convex as permanent memory st
 - Convex (database + serverless functions)
 - Telegram Bot API
 - Google Gemini API (default model: gemini-2.5-pro)
+- OpenRouter TTS API (default model: Fish Audio S2.1 Pro)
 
 ## Environment
 
@@ -20,6 +21,12 @@ Copy `.env.example` to `.env` and fill values:
 - `NUXT_TELEGRAM_ALLOWED_ID`
 - `NUXT_GEMINI_API_KEY`
 - optional: `NUXT_GEMINI_MODEL`, `NUXT_GEMINI_BASE_URL`, `NUXT_SYSTEM_PROMPT`
+- `NUXT_BOT_USERNAME` as the shared Telegram/web memory identity
+- `NUXT_OPENROUTER_API_KEY` to enable generated speech
+- `NUXT_OPENROUTER_TTS_REFERENCE_ASSET` for the clone reference filename under `server/assets/`
+- optional: `NUXT_OPENROUTER_BASE_URL`, `NUXT_OPENROUTER_TTS_MODEL`, `NUXT_OPENROUTER_TTS_REFERENCE_TEXT`, `NUXT_OPENROUTER_TTS_VOICE`
+
+Put the reference clip at `server/assets/voice-reference.mp3` (or configure another filename). MP3, WAV, FLAC, M4A, and OGG are accepted, with a maximum decoded size of 15 MiB. For the best cloning result, set `NUXT_OPENROUTER_TTS_REFERENCE_TEXT` to the clip's exact transcript. Nitro bundles this directory as a private server asset; it is not exposed as a public URL.
 
 ## Local Development
 
@@ -43,6 +50,17 @@ Copy `.env.example` to `.env` and fill values:
 
 - Schema: `convex/schema.ts`
 - Chat logic (sessions/messages queries and mutations): `convex/chat.ts`
+
+## Web Chat
+
+The conversational interface lives at `/chat` and includes:
+
+- shared Telegram and web conversation history
+- new web-native sessions stored in the same Convex tables
+- optional per-message playback and automatic spoken replies through OpenRouter
+- responsive desktop and mobile layouts
+
+The app does not include application-level authentication. Keep the service on a trusted private network or protect it at the Cloud Run/IAP layer.
 
 ## Dashboard
 
