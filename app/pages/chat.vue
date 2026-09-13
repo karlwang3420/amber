@@ -21,6 +21,12 @@
 		createdAt: number;
 	};
 
+	type Memory = {
+		_id: string;
+		content: string;
+		createdAt: number;
+	};
+
 	type ChatResponse = {
 		sessionId: string;
 		message: {
@@ -43,6 +49,11 @@
 		{ sessionId?: string },
 		Message[]
 	>("chat:getMessagesBySession");
+	const getBotMemoriesRef = makeFunctionReference<
+		"query",
+		{ botUsername: string },
+		Memory[]
+	>("memory:getBotMemories");
 
 	const { data: sessionsData, isPending: sessionsPending } = useConvexQuery(
 		getAllSessionsRef,
@@ -83,6 +94,11 @@
 		})),
 	);
 	const messages = computed(() => messagesData.value ?? []);
+	const { data: memoriesData, isPending: memoriesPending } = useConvexQuery(
+		getBotMemoriesRef,
+		{ botUsername },
+	);
+	const memories = computed(() => memoriesData.value ?? []);
 
 	const draft = ref("");
 	const sending = ref(false);
@@ -121,10 +137,6 @@
 			hour: "2-digit",
 			minute: "2-digit",
 		});
-	}
-
-	function displayContent(content: string) {
-		return content.replace(/<memory>[\s\S]*?<\/memory>/gi, "").trim();
 	}
 
 	function selectSession(sessionId: string) {
@@ -217,7 +229,10 @@
 		}
 	});
 
-	onBeforeUnmount(() => stopSpeech());
+	onBeforeUnmount(() => {
+		stopSpeech();
+		if (memoryCopyResetTimer) clearTimeout(memoryCopyResetTimer);
+	});
 
 	function stopSpeech() {
 		currentAudio?.pause();
@@ -268,11 +283,65 @@
 
 	const copiedMessageId = ref<string | null>(null);
 	async function copyMessage(message: Message) {
-		await navigator.clipboard.writeText(displayContent(message.content));
+		await navigator.clipboard.writeText(message.content);
 		copiedMessageId.value = message._id;
 		setTimeout(() => {
 			if (copiedMessageId.value === message._id) copiedMessageId.value = null;
 		}, 1500);
+	}
+
+	type MemoryCopyStatus = "idle" | "copied" | "error";
+	const memoryCopyStatus = ref<MemoryCopyStatus>("idle");
+	let memoryCopyResetTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function formatMemoryDate(timestamp: number) {
+		return new Date(timestamp).toISOString().slice(0, 10);
+	}
+
+	async function writeToClipboard(content: string) {
+		if (navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(content);
+				return;
+			} catch {
+				// Fall back for browsers that block the Clipboard API.
+			}
+		}
+
+		const textarea = document.createElement("textarea");
+		textarea.value = content;
+		textarea.setAttribute("readonly", "");
+		textarea.style.position = "fixed";
+		textarea.style.opacity = "0";
+		document.body.appendChild(textarea);
+		textarea.select();
+		const copied = document.execCommand("copy");
+		textarea.remove();
+
+		if (!copied) throw new Error("Clipboard access was denied.");
+	}
+
+	async function copyAllMemories() {
+		if (memoriesPending.value || memories.value.length === 0) return;
+
+		const content = memories.value
+			.map(
+				(memory) =>
+					`[${formatMemoryDate(memory.createdAt)}] ${memory.content.trim()}`,
+			)
+			.join("\n\n");
+
+		try {
+			await writeToClipboard(content);
+			memoryCopyStatus.value = "copied";
+		} catch {
+			memoryCopyStatus.value = "error";
+		}
+
+		if (memoryCopyResetTimer) clearTimeout(memoryCopyResetTimer);
+		memoryCopyResetTimer = setTimeout(() => {
+			memoryCopyStatus.value = "idle";
+		}, 2500);
 	}
 </script>
 
@@ -326,6 +395,28 @@
 			</nav>
 
 			<div class="rail-footer">
+				<button
+					class="memory-copy"
+					:disabled="memoriesPending || memories.length === 0"
+					@click="copyAllMemories">
+					<UIcon
+						:name="
+							memoryCopyStatus === 'copied'
+								? 'i-lucide-check'
+								: memoryCopyStatus === 'error'
+									? 'i-lucide-circle-alert'
+									: memoriesPending
+										? 'i-lucide-loader-circle'
+										: 'i-lucide-copy'
+						" />
+					<span v-if="memoryCopyStatus === 'copied'">
+						{{ memories.length }} memories copied
+					</span>
+					<span v-else-if="memoryCopyStatus === 'error'">Couldn’t copy memories</span>
+					<span v-else-if="memoriesPending">Loading long-term memory</span>
+					<span v-else-if="memories.length === 0">No long-term memories yet</span>
+					<span v-else>Copy all long-term memories</span>
+				</button>
 				<NuxtLink to="/" class="vault-link">
 					<UIcon name="i-lucide-archive" />
 					<span>Open memory vault</span>
@@ -394,7 +485,7 @@
 								<strong>{{ message.role === "assistant" ? "Amber" : message.role === "user" ? "You" : "System" }}</strong>
 								<span>{{ messageTime(message.createdAt) }}</span>
 							</div>
-							<p>{{ displayContent(message.content) }}</p>
+							<p>{{ message.content }}</p>
 							<div class="message-actions">
 								<button v-if="message.role === 'assistant'" :disabled="speechLoadingId === message._id" @click="speak(message.content, message._id)">
 									<UIcon :name="speechLoadingId === message._id ? 'i-lucide-loader-circle' : speakingId === message._id ? 'i-lucide-square' : 'i-lucide-volume-2'" :class="{ 'spin-icon': speechLoadingId === message._id }" />
@@ -500,11 +591,15 @@
 	.channel-glyph :deep(svg) { width: 12px; }
 	.rail-loading { display: grid; gap: 14px; padding: 14px 10px; }
 	.loading-line { height: 34px; border-radius: 3px; background: linear-gradient(90deg, #151614 25%, #20201c 50%, #151614 75%); background-size: 200% 100%; animation: shimmer 1.6s infinite; }
-	.rail-footer { padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .055); }
+	.rail-footer { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .055); }
+	.memory-copy { display: flex; align-items: center; gap: 9px; width: 100%; padding: 0; border: 0; background: transparent; color: #b6a78d; font: inherit; font-size: 11px; text-align: left; cursor: pointer; transition: color .2s; }
+	.memory-copy:hover:not(:disabled) { color: var(--amber-bright); }
+	.memory-copy:disabled { color: #555149; cursor: default; }
+	.memory-copy :deep(svg) { width: 14px; flex: 0 0 auto; }
 	.vault-link { display: flex; align-items: center; gap: 9px; color: #999387; font-size: 11px; text-decoration: none; transition: color .2s; }
 	.vault-link:hover { color: var(--amber-bright); }
 	.vault-link :deep(svg) { width: 14px; }
-	.connection-note { display: flex; align-items: center; gap: 7px; margin-top: 13px; color: #4d554c; font-size: 9px; }
+	.connection-note { display: flex; align-items: center; gap: 7px; color: #4d554c; font-size: 9px; }
 	.connection-note span { width: 5px; height: 5px; border-radius: 50%; background: #667e5d; box-shadow: 0 0 7px #667e5d; }
 
 	.conversation-stage { position: relative; z-index: 2; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; min-width: 0; }
