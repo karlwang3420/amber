@@ -48,14 +48,14 @@ export default defineEventHandler(async (event) => {
 		: undefined;
 	let sessionId = body.sessionId?.trim();
 
-	if (!sessionId) {
-		sessionId = await convexClient.mutation(createWebSessionRef, {
-			title: makeSessionTitle(message),
-			...(botUsername ? { botUsername } : {}),
-		});
-	}
-
 	try {
+		if (!sessionId) {
+			sessionId = await convexClient.mutation(createWebSessionRef, {
+				title: makeSessionTitle(message),
+				...(botUsername ? { botUsername } : {}),
+			});
+		}
+
 		const result = await runAssistantTurn({
 			convexClient,
 			sessionId,

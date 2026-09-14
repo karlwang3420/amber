@@ -5,7 +5,9 @@
 	"scripts": {
 		"build": "nuxt build",
 		"dev": "nuxt dev --port 3010",
+		"dev:moon": "nuxt dev --port 3011 --dotenv .env.moon",
 		"dev:all": "run-p dev convex:dev",
+		"dev:moon:all": "run-p dev:moon convex:dev",
 		"convex:deploy": "convex deploy",
 		"generate": "nuxt generate",
 		"preview": "nuxt preview",

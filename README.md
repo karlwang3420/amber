@@ -42,6 +42,15 @@ Put the reference clip at `server/assets/voice-reference.mp3` (or configure anot
 
    `pnpm dev:all`
 
+   For Moon on port 3011 using `.env.moon`, run `pnpm dev:moon:all`.
+   `pnpm dev` and `pnpm dev:moon` start only Nuxt; they do not sync Convex functions.
+   Both combined commands use the Convex CLI deployment configured by `convex dev`.
+   Its `CONVEX_DEPLOYMENT` (usually in `.env.local`) must match the app's
+   `NUXT_PUBLIC_CONVEX_URL`. `NUXT_CONVEX_DEPLOYMENT` alone does not configure the CLI.
+
+   If chat reports `Could not find public function for 'chat:createWebSession'`,
+   sync the backend with `pnpm exec convex dev --once`, then retry the message.
+
 4. Telegram webhook endpoint:
 
    `POST /api/telegram/webhook`
