@@ -23,6 +23,7 @@ import {
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
@@ -110,17 +111,37 @@ function jwkThumbprint({ crv, kty, x, y }) {
 
 async function askForPassword() {
 	if (!stdin.isTTY) return null;
-	const prompt = createInterface({ input: stdin, output: stdout });
+	// Echo the prompts but not the typed characters.
+	let muted = false;
+	const output = new Writable({
+		write(chunk, encoding, done) {
+			if (!muted) stdout.write(chunk, encoding);
+			done();
+		},
+	});
+	const prompt = createInterface({ input: stdin, output, terminal: true });
+	const askHidden = async (question) => {
+		muted = false;
+		const answer = prompt.question(question);
+		muted = true;
+		const value = (await answer).trim();
+		stdout.write("\n");
+		return value;
+	};
 	try {
 		for (;;) {
-			const answer = (
-				await prompt.question("Choose a sign-in password (blank = generate one): ")
-			).trim();
+			const answer = await askHidden(
+				"Choose a sign-in password (input hidden; blank = generate one): ",
+			);
 			if (!answer) return null;
 			// Quotes and backslashes would need escaping in dotenv and in the
 			// Cloud Run env-vars YAML that deploy-gcp.ps1 writes.
-			if (answer.length >= 12 && !/['"`\\]/.test(answer)) return answer;
-			console.log("Use at least 12 characters, without quotes, backticks or backslashes.");
+			if (answer.length < 12 || /['"`\\]/.test(answer)) {
+				console.log("Use at least 12 characters, without quotes, backticks or backslashes.");
+				continue;
+			}
+			if ((await askHidden("Type it again: ")) === answer) return answer;
+			console.log("The passwords did not match. Try again.");
 		}
 	} finally {
 		prompt.close();

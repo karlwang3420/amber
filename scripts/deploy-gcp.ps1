@@ -170,11 +170,6 @@ function Set-ProcessEnvFromFile {
                         $env:CONVEX_DEPLOYMENT = $value
                     }
                 }
-                "NUXT_CONVEX_DEPLOYMENT" {
-                    if (-not $env:CONVEX_DEPLOYMENT) {
-                        $env:CONVEX_DEPLOYMENT = $value
-                    }
-                }
             }
         }
     }

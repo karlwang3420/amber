@@ -15,13 +15,12 @@ Private Nuxt 4 + Nuxt UI conversational assistant with web and Telegram interfac
 
 Copy `.env.example` to `.env` and fill values:
 
-- `NUXT_CONVEX_DEPLOYMENT`
 - `NUXT_PUBLIC_CONVEX_URL`
 - `NUXT_TELEGRAM_BOT_TOKEN`
 - `NUXT_TELEGRAM_ALLOWED_ID`
 - `NUXT_GEMINI_API_KEY`
 - optional: `NUXT_GEMINI_MODEL`, `NUXT_GEMINI_BASE_URL`, `NUXT_SYSTEM_PROMPT`
-- `NUXT_BOT_USERNAME` as the shared Telegram/web memory identity
+- `NUXT_BOT_USERNAME` and `NUXT_PUBLIC_BOT_USERNAME`, set to the same value, as the shared Telegram/web memory identity. The browser only reads the `PUBLIC` one at runtime; the fallback between them applies only at build time.
 - `NUXT_OPENROUTER_API_KEY` to enable generated speech
 - `NUXT_OPENROUTER_TTS_REFERENCE_ASSET` for the clone reference filename under `server/assets/`
 - optional: `NUXT_OPENROUTER_BASE_URL`, `NUXT_OPENROUTER_TTS_MODEL`, `NUXT_OPENROUTER_TTS_REFERENCE_TEXT`, `NUXT_OPENROUTER_TTS_VOICE`
@@ -47,7 +46,7 @@ Put the reference clip at `server/assets/voice-reference.mp3` (or configure anot
    `pnpm dev` and `pnpm dev:moon` start only Nuxt; they do not sync Convex functions.
    Both combined commands use the Convex CLI deployment configured by `convex dev`.
    Its `CONVEX_DEPLOYMENT` (usually in `.env.local`) must match the app's
-   `NUXT_PUBLIC_CONVEX_URL`. `NUXT_CONVEX_DEPLOYMENT` alone does not configure the CLI.
+   `NUXT_PUBLIC_CONVEX_URL`.
 
    If chat reports `Could not find public function for 'chat:createWebSession'`,
    sync the backend with `pnpm exec convex dev --once`, then retry the message.
