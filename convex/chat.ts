@@ -1,14 +1,17 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { requireServerSecret, requireUser } from "./lib/access";
 
 export const createOrGetSession = mutation({
 	args: {
+		serverSecret: v.string(),
 		telegramChatId: v.number(),
 		topicId: v.optional(v.number()),
 		title: v.optional(v.string()),
 		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		const existing =
 			args.topicId !== undefined
 				? await ctx.db
@@ -46,10 +49,12 @@ export const createOrGetSession = mutation({
 
 export const createWebSession = mutation({
 	args: {
+		serverSecret: v.string(),
 		title: v.optional(v.string()),
 		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		return ctx.db.insert("sessions", {
 			channel: "web",
 			title: args.title,
@@ -62,6 +67,7 @@ export const createWebSession = mutation({
 
 export const saveMessage = mutation({
 	args: {
+		serverSecret: v.string(),
 		sessionId: v.id("sessions"),
 		role: v.union(
 			v.literal("user"),
@@ -72,16 +78,20 @@ export const saveMessage = mutation({
 		createdAt: v.number(),
 	},
 	handler: async (ctx, args) => {
-		return ctx.db.insert("messages", args);
+		const { serverSecret, ...message } = args;
+		requireServerSecret(serverSecret);
+		return ctx.db.insert("messages", message);
 	},
 });
 
 export const getSessionHistory = query({
 	args: {
+		serverSecret: v.string(),
 		sessionId: v.id("sessions"),
 		limit: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		const limit = Math.max(1, Math.min(args.limit ?? 20, 200));
 
 		const docs = await ctx.db
@@ -97,8 +107,12 @@ export const getSessionHistory = query({
 });
 
 export const getSessionSystemPrompt = query({
-	args: { sessionId: v.id("sessions") },
+	args: {
+		serverSecret: v.string(),
+		sessionId: v.id("sessions"),
+	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		const session = await ctx.db.get(args.sessionId);
 		return session?.systemPromptSnapshot ?? null;
 	},
@@ -106,10 +120,12 @@ export const getSessionSystemPrompt = query({
 
 export const setSessionSystemPrompt = mutation({
 	args: {
+		serverSecret: v.string(),
 		sessionId: v.id("sessions"),
 		systemPromptSnapshot: v.string(),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		await ctx.db.patch(args.sessionId, {
 			systemPromptSnapshot: args.systemPromptSnapshot,
 		});
@@ -121,6 +137,7 @@ export const getAllSessions = query({
 		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		await requireUser(ctx);
 		const sessions = args.botUsername
 			? await ctx.db
 					.query("sessions")
@@ -162,10 +179,12 @@ export const getAllSessions = query({
 
 export const deactivateSession = mutation({
 	args: {
+		serverSecret: v.string(),
 		telegramChatId: v.number(),
 		topicId: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		const existing =
 			args.topicId !== undefined
 				? await ctx.db
@@ -195,12 +214,14 @@ export const deactivateSession = mutation({
 
 export const createFreshSession = mutation({
 	args: {
+		serverSecret: v.string(),
 		telegramChatId: v.number(),
 		topicId: v.optional(v.number()),
 		title: v.optional(v.string()),
 		botUsername: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		requireServerSecret(args.serverSecret);
 		const existing =
 			args.topicId !== undefined
 				? await ctx.db
@@ -241,6 +262,7 @@ export const getMessagesBySession = query({
 		sessionId: v.optional(v.id("sessions")),
 	},
 	handler: async (ctx, args) => {
+		await requireUser(ctx);
 		if (!args.sessionId) {
 			return [];
 		}

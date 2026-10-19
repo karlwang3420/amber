@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { extname } from "node:path";
+import { requireAuth } from "../utils/auth";
 
 type SpeechRequest = {
 	text?: string;
@@ -61,6 +62,8 @@ function prepareSpeechText(value: string) {
 }
 
 export default defineEventHandler(async (event) => {
+	await requireAuth(event);
+
 	const body = await readBody<SpeechRequest>(event);
 	const text = prepareSpeechText(body.text ?? "");
 

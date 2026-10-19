@@ -1,5 +1,5 @@
-import type { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import type { ServerConvex } from "./convex";
 
 type ChatRole = "user" | "assistant" | "system";
 
@@ -26,7 +26,7 @@ type AssistantConfig = {
 };
 
 type RunAssistantTurnOptions = {
-	convexClient: ConvexHttpClient;
+	convexClient: ServerConvex;
 	sessionId: string;
 	userText: string;
 	config: AssistantConfig;
@@ -82,7 +82,7 @@ function isValidRole(value: string): value is ChatRole {
 }
 
 async function getSystemPrompt(
-	convexClient: ConvexHttpClient,
+	convexClient: ServerConvex,
 	sessionId: string,
 	config: AssistantConfig,
 ) {
@@ -125,7 +125,7 @@ async function getSystemPrompt(
 }
 
 async function persistMemories(
-	convexClient: ConvexHttpClient,
+	convexClient: ServerConvex,
 	botUsername: string | undefined,
 	assistantText: string,
 ) {

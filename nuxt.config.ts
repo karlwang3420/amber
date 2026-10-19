@@ -32,6 +32,13 @@ export default defineNuxtConfig({
 			"voice-reference.mp3",
 		openRouterTtsReferenceText:
 			process.env.NUXT_OPENROUTER_TTS_REFERENCE_TEXT || "",
+		// Access secrets stay empty at build time so they are never baked into
+		// .output; Nitro fills them at runtime from the matching NUXT_* variables.
+		convexServerSecret: "", // NUXT_CONVEX_SERVER_SECRET
+		telegramWebhookSecret: "", // NUXT_TELEGRAM_WEBHOOK_SECRET
+		authPassword: "", // NUXT_AUTH_PASSWORD
+		sessionPassword: "", // NUXT_SESSION_PASSWORD
+		authJwtPrivateKey: "", // NUXT_AUTH_JWT_PRIVATE_KEY
 		public: {
 			convexUrl: process.env.NUXT_PUBLIC_CONVEX_URL,
 			botUsername:

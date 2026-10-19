@@ -9,6 +9,7 @@
  */
 
 import type * as chat from "../chat.js";
+import type * as lib_access from "../lib/access.js";
 import type * as memory from "../memory.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   chat: typeof chat;
+  "lib/access": typeof lib_access;
   memory: typeof memory;
 }>;
 

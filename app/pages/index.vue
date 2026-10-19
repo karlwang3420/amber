@@ -183,6 +183,13 @@
 					<UBadge v-if="botUsername" color="neutral" variant="outline" size="sm">
 						@{{ botUsername }}
 					</UBadge>
+					<UButton
+						label="Sign out"
+						icon="i-lucide-log-out"
+						color="neutral"
+						variant="ghost"
+						size="sm"
+						@click="signOut" />
 				</div>
 			</UContainer>
 		</header>
