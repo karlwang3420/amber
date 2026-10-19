@@ -8,7 +8,6 @@ export default defineNuxtConfig({
 	modules: ["@nuxt/ui", "@nuxt/eslint"],
 	css: ["~/assets/css/main.css"],
 	runtimeConfig: {
-		convexDeployment: process.env.NUXT_CONVEX_DEPLOYMENT,
 		telegramBotToken: process.env.NUXT_TELEGRAM_BOT_TOKEN,
 		telegramAllowedId: process.env.NUXT_TELEGRAM_ALLOWED_ID,
 		geminiApiKey: process.env.NUXT_GEMINI_API_KEY,
