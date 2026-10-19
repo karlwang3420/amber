@@ -1,5 +1,6 @@
-import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { safeEqual } from "../../utils/auth";
+import { createServerConvex } from "../../utils/convex";
 
 type ChatRole = "user" | "assistant" | "system";
 
@@ -191,10 +192,31 @@ async function handleTelegramUpdate(
 	const systemPrompt = runtimeConfig.systemPrompt;
 	const botUsername = runtimeConfig.botUsername;
 	const convexUrl = runtimeConfig.public.convexUrl;
+	const convexServerSecret = runtimeConfig.convexServerSecret;
+	const webhookSecret = runtimeConfig.telegramWebhookSecret;
 
-	if (!botToken || !allowedIdRaw || !geminiApiKey || !convexUrl) {
+	if (
+		!botToken ||
+		!allowedIdRaw ||
+		!geminiApiKey ||
+		!convexUrl ||
+		!convexServerSecret ||
+		!webhookSecret
+	) {
 		console.error("[webhook] Missing required environment configuration");
 		return { ok: true };
+	}
+
+	// Telegram echoes the secret_token given to setWebhook in this header.
+	// Without it, anyone could post forged updates as the allowed chat.
+	// A 401 (unlike other failures) is deliberate: a misconfigured secret then
+	// shows up in getWebhookInfo and Telegram keeps the update queued.
+	const receivedSecret =
+		getHeader(event, "x-telegram-bot-api-secret-token") ?? "";
+	if (!safeEqual(receivedSecret, String(webhookSecret))) {
+		console.warn("[webhook] Rejected update with a missing or wrong secret token");
+		setResponseStatus(event, 401);
+		return { ok: false };
 	}
 
 	const geminiApiKeyValue = String(geminiApiKey);
@@ -242,7 +264,10 @@ async function handleTelegramUpdate(
 		return { ok: true };
 	}
 
-	const convexClient = new ConvexHttpClient(convexUrl);
+	const convexClient = createServerConvex(
+		String(convexUrl),
+		String(convexServerSecret),
+	);
 	const normalizedText = incomingText.trim();
 	const telegramCommand = extractTelegramCommand(
 		normalizedText,

@@ -1,6 +1,7 @@
-import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { runAssistantTurn } from "../utils/assistant";
+import { requireAuth } from "../utils/auth";
+import { createServerConvex } from "../utils/convex";
 
 type ChatRequest = {
 	sessionId?: string;
@@ -21,6 +22,8 @@ function makeSessionTitle(message: string) {
 }
 
 export default defineEventHandler(async (event) => {
+	await requireAuth(event);
+
 	const body = await readBody<ChatRequest>(event);
 	const message = body.message?.trim() ?? "";
 
@@ -33,16 +36,20 @@ export default defineEventHandler(async (event) => {
 
 	const runtimeConfig = useRuntimeConfig(event);
 	const convexUrl = runtimeConfig.public.convexUrl;
+	const convexServerSecret = runtimeConfig.convexServerSecret;
 	const geminiApiKey = runtimeConfig.geminiApiKey;
 
-	if (!convexUrl || !geminiApiKey) {
+	if (!convexUrl || !convexServerSecret || !geminiApiKey) {
 		throw createError({
 			statusCode: 503,
 			statusMessage: "Amber is missing its Convex or Gemini configuration.",
 		});
 	}
 
-	const convexClient = new ConvexHttpClient(String(convexUrl));
+	const convexClient = createServerConvex(
+		String(convexUrl),
+		String(convexServerSecret),
+	);
 	const botUsername = runtimeConfig.botUsername
 		? String(runtimeConfig.botUsername)
 		: undefined;

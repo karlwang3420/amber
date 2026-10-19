@@ -421,6 +421,10 @@
 					<UIcon name="i-lucide-archive" />
 					<span>Open memory vault</span>
 				</NuxtLink>
+				<button class="vault-link" @click="signOut">
+					<UIcon name="i-lucide-log-out" />
+					<span>Sign out</span>
+				</button>
 				<div class="connection-note"><span /> Convex memory connected</div>
 			</div>
 		</aside>
@@ -596,7 +600,7 @@
 	.memory-copy:hover:not(:disabled) { color: var(--amber-bright); }
 	.memory-copy:disabled { color: #555149; cursor: default; }
 	.memory-copy :deep(svg) { width: 14px; flex: 0 0 auto; }
-	.vault-link { display: flex; align-items: center; gap: 9px; color: #999387; font-size: 11px; text-decoration: none; transition: color .2s; }
+	.vault-link { display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: transparent; color: #999387; font: inherit; font-size: 11px; text-decoration: none; cursor: pointer; transition: color .2s; }
 	.vault-link:hover { color: var(--amber-bright); }
 	.vault-link :deep(svg) { width: 14px; }
 	.connection-note { display: flex; align-items: center; gap: 7px; color: #4d554c; font-size: 9px; }

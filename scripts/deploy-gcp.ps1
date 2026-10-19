@@ -20,6 +20,10 @@
 .PARAMETER UseCloudBuild
     Use Cloud Build instead of local Docker build.
 
+.PARAMETER RegisterTelegramWebhook
+    After deploying, point the Telegram webhook at the service URL with the
+    NUXT_TELEGRAM_WEBHOOK_SECRET from the env file as its secret token.
+
 .PARAMETER DryRun
     Print commands without executing them.
 
@@ -43,6 +47,7 @@ param(
     [string]$EnvFile = ".env",
     [switch]$DeployConvex,
     [switch]$UseCloudBuild,
+    [switch]$RegisterTelegramWebhook,
     [switch]$DryRun
 )
 
@@ -135,6 +140,7 @@ function Set-Configuration {
     Write-Host "  Env File:        $EnvFile"
     Write-Host "  Deploy Convex:   $DeployConvex"
     Write-Host "  Use Cloud Build: $UseCloudBuild"
+    Write-Host "  Set TG webhook:  $RegisterTelegramWebhook"
 }
 
 function Set-ProcessEnvFromFile {
@@ -202,6 +208,7 @@ function Get-EnvVarsFile {
     # Create a temporary YAML file for env vars (avoids all escaping issues)
     $tempEnvFile = Join-Path $env:TEMP "gcp-deploy-env-$([guid]::NewGuid().ToString('N').Substring(0,8)).yaml"
     $yamlLines = @()
+    $definedKeys = @()
     $content = Get-Content $EnvFile
 
     foreach ($line in $content) {
@@ -224,9 +231,27 @@ function Get-EnvVarsFile {
             # Escape any double quotes in the value
             $value = $value -replace '"', '\"'
             $yamlLines += "${key}: `"${value}`""
+            if ($value) {
+                $definedKeys += $key
+            }
         }
     }
-    
+
+    # Without these the deployed app refuses sign-in and Telegram updates.
+    $accessKeys = @(
+        "NUXT_CONVEX_SERVER_SECRET",
+        "NUXT_SESSION_PASSWORD",
+        "NUXT_AUTH_PASSWORD",
+        "NUXT_AUTH_JWT_PRIVATE_KEY",
+        "NUXT_TELEGRAM_WEBHOOK_SECRET"
+    )
+    $missingKeys = @($accessKeys | Where-Object { $definedKeys -notcontains $_ })
+    if ($missingKeys.Count -gt 0) {
+        Write-Err "Missing access secrets in ${EnvFile}: $($missingKeys -join ', ')"
+        Write-Err "Run: node scripts/setup-auth.mjs --env $EnvFile"
+        exit 1
+    }
+
     # Write YAML file
     $yamlLines | Out-File -FilePath $tempEnvFile -Encoding UTF8
     Write-Success "Environment variables loaded ($($yamlLines.Count) variables)."
@@ -320,6 +345,8 @@ function Deploy-ToCloudRun {
         "--region=$Region",
         "--project=$ProjectId",
         "--platform=managed",
+        # Public ingress is required for the Telegram webhook. The app itself
+        # requires sign-in, and Convex requires a token or the server secret.
         "--allow-unauthenticated",
         "--port=3000",
         "--memory=512Mi",
@@ -373,7 +400,58 @@ function Get-ServiceUrl {
         Write-Host "To view logs:  gcloud run logs read $ServiceName --region=$Region"
         Write-Host "To update:     .\scripts\deploy-gcp.ps1"
         Write-Host ""
+        return $serviceUrl
     }
+}
+
+function Get-EnvFileValue {
+    param([string]$FilePath, [string]$Key)
+
+    if (-not (Test-Path $FilePath)) {
+        return $null
+    }
+
+    foreach ($line in Get-Content $FilePath) {
+        if ($line -match "^\s*$([regex]::Escape($Key))\s*=(.*)$") {
+            return $matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+    return $null
+}
+
+function Register-TelegramWebhook {
+    param([string]$ServiceUrl)
+
+    Write-Info "Registering the Telegram webhook with its secret token..."
+
+    if ($DryRun) {
+        Write-Host "[DRY-RUN] Telegram setWebhook -> <service URL>/api/telegram/webhook (secret token from $EnvFile)" -ForegroundColor Yellow
+        return
+    }
+
+    $botToken = Get-EnvFileValue -FilePath $EnvFile -Key "NUXT_TELEGRAM_BOT_TOKEN"
+    $secretToken = Get-EnvFileValue -FilePath $EnvFile -Key "NUXT_TELEGRAM_WEBHOOK_SECRET"
+    if (-not $botToken -or -not $secretToken -or -not $ServiceUrl) {
+        Write-Err "Registering the webhook needs NUXT_TELEGRAM_BOT_TOKEN, NUXT_TELEGRAM_WEBHOOK_SECRET and the service URL."
+        exit 1
+    }
+
+    $webhookUrl = "$ServiceUrl/api/telegram/webhook"
+    $body = @{ url = $webhookUrl; secret_token = $secretToken } | ConvertTo-Json -Compress
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri "https://api.telegram.org/bot$botToken/setWebhook" -ContentType "application/json" -Body $body
+    }
+    catch {
+        # Report only Telegram's reply; the request URL contains the bot token.
+        Write-Err "Telegram setWebhook failed: $($_.ErrorDetails.Message)"
+        exit 1
+    }
+
+    if (-not $response.ok) {
+        Write-Err "Telegram rejected the webhook: $($response.description)"
+        exit 1
+    }
+    Write-Success "Telegram webhook set to $webhookUrl"
 }
 
 # Main execution
@@ -403,7 +481,11 @@ function Main {
     }
     
     Deploy-ToCloudRun -EnvVarsFile $envVarsFile
-    Get-ServiceUrl
+    $serviceUrl = Get-ServiceUrl
+
+    if ($RegisterTelegramWebhook) {
+        Register-TelegramWebhook -ServiceUrl $serviceUrl
+    }
 }
 
 # Run
