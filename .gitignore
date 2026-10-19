@@ -22,3 +22,7 @@ logs
 .env
 .env.*
 !.env.example
+
+# Private voice-cloning reference. Nitro bundles it at build time; never commit it.
+server/assets/*
+!server/assets/README.md
