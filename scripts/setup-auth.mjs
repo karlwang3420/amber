@@ -48,12 +48,39 @@ const GENERATED = {
 			.toString("base64"),
 };
 
+const ENV_LINE = /^\s*(?:export\s+)?([\w.-]+)\s*=\s*(.*)$/;
+
+// Reads a value the way dotenv (and so Nuxt) does: quoted values keep "#",
+// unquoted values end at the first "#".
+function parseEnvValue(raw) {
+	const quote = raw[0];
+	if (quote === "'" || quote === '"' || quote === "`") {
+		for (let index = 1; index < raw.length; index++) {
+			if (raw[index] === quote && raw[index - 1] !== "\\") {
+				const value = raw.slice(1, index);
+				return quote === '"'
+					? value.replace(/\\n/g, "\n").replace(/\\r/g, "\r")
+					: value;
+			}
+		}
+	}
+	return raw.split("#")[0].trim();
+}
+
+// Writes a value so that dotenv reads it back unchanged.
+function serializeEnvValue(value) {
+	if (/^[\w.:/+=@-]*$/.test(value)) return value;
+	if (!value.includes("'")) return `'${value}'`;
+	if (!/["\\\r\n]/.test(value)) return `"${value}"`;
+	throw new Error("A value contains both quote kinds or a backslash; edit it by hand.");
+}
+
 function readEnv(path) {
 	const text = readFileSync(path, "utf8");
 	const values = {};
 	for (const line of text.split(/\r?\n/)) {
-		const match = line.match(/^\s*([A-Z0-9_]+)\s*=(.*)$/);
-		if (match) values[match[1]] = match[2].trim().replace(/^(['"])(.*)\1$/, "$2");
+		const match = line.match(ENV_LINE);
+		if (match) values[match[1]] = parseEnvValue(match[2]);
 	}
 	return { text, values };
 }
@@ -62,12 +89,13 @@ function writeEnv(path, text, updates) {
 	const newline = text.includes("\r\n") ? "\r\n" : "\n";
 	const lines = text.split(/\r?\n/);
 	for (const [key, value] of Object.entries(updates)) {
-		const index = lines.findIndex((line) => line.match(/^\s*([A-Z0-9_]+)\s*=/)?.[1] === key);
+		const line = `${key}=${serializeEnvValue(value)}`;
+		const index = lines.findIndex((existing) => existing.match(ENV_LINE)?.[1] === key);
 		if (index === -1) {
 			if (lines.at(-1) === "") lines.pop();
-			lines.push(`${key}=${value}`, "");
+			lines.push(line, "");
 		} else {
-			lines[index] = `${key}=${value}`;
+			lines[index] = line;
 		}
 	}
 	writeFileSync(path, lines.join(newline));
@@ -88,8 +116,11 @@ async function askForPassword() {
 			const answer = (
 				await prompt.question("Choose a sign-in password (blank = generate one): ")
 			).trim();
-			if (!answer || answer.length >= 12) return answer || null;
-			console.log("Use at least 12 characters.");
+			if (!answer) return null;
+			// Quotes and backslashes would need escaping in dotenv and in the
+			// Cloud Run env-vars YAML that deploy-gcp.ps1 writes.
+			if (answer.length >= 12 && !/['"`\\]/.test(answer)) return answer;
+			console.log("Use at least 12 characters, without quotes, backticks or backslashes.");
 		}
 	} finally {
 		prompt.close();

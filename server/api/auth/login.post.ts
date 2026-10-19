@@ -21,6 +21,12 @@ export default defineEventHandler(async (event) => {
 		});
 	}
 
+	const body = await readBody<LoginRequest>(event);
+	const password = typeof body?.password === "string" ? body.password : "";
+
+	// Check the budget only once the body has arrived. Everything from here to
+	// the counter update is synchronous, so concurrent requests with slow
+	// bodies cannot all pass the check before any failure is counted.
 	const now = Date.now();
 	if (now - failureWindowStart > FAILURE_WINDOW_MS) {
 		failureWindowStart = now;
@@ -32,9 +38,6 @@ export default defineEventHandler(async (event) => {
 			statusMessage: "Too many failed attempts. Try again later.",
 		});
 	}
-
-	const body = await readBody<LoginRequest>(event);
-	const password = typeof body?.password === "string" ? body.password : "";
 
 	if (!safeEqual(password, expectedPassword)) {
 		failureCount++;

@@ -40,15 +40,20 @@
 	const submitting = ref(false);
 	const errorMessage = ref("");
 
-	// Only same-origin paths; "//host" and "/\host" would leave the site.
+	// Resolve the target exactly as the browser will before trusting it:
+	// "//host", "/\host" or a stripped control character ("/\n/host") would
+	// otherwise leave the site.
 	function redirectTarget() {
 		const target = route.query.redirect;
-		return typeof target === "string" &&
-			target.startsWith("/") &&
-			!target.startsWith("//") &&
-			!target.startsWith("/\\")
-			? target
-			: "/";
+		if (typeof target !== "string") return "/";
+		try {
+			const url = new URL(target, window.location.origin);
+			return url.origin === window.location.origin
+				? `${url.pathname}${url.search}${url.hash}`
+				: "/";
+		} catch {
+			return "/";
+		}
 	}
 
 	async function signIn() {
